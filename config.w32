@@ -1,0 +1,13 @@
+// $Id$
+// vim:ft=javascript
+
+// If your extension references something external, use ARG_WITH
+// ARG_WITH("akm", "for akm support", "no");
+
+// Otherwise, use ARG_ENABLE
+// ARG_ENABLE("akm", "enable akm support", "no");
+
+if (PHP_AKM != "no") {
+	EXTENSION("akm", "akm.c", PHP_EXTNAME_SHARED, "/DZEND_ENABLE_STATIC_TSRMLS_CACHE=1");
+}
+
