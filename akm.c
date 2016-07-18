@@ -163,7 +163,7 @@ static int akm_scan_directory(char *dirname,
             success++;
         }
     }
-
+    closedir(dir);
     return success;
 }
 
