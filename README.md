@@ -18,7 +18,8 @@ $ git clone https://github.com/imaben/php-akm.git
 $ cd php-akm
 $ phpize
 $ ./configure
-$ sudo make && make install
+$ make 
+$ sudo make install
 ```
 
 ## php.ini配置
@@ -121,11 +122,6 @@ CPU:Intel(R) Core(TM) i5-4590 CPU @ 3.30GHz
 硬盘：东芝Q300
 ```
 
-关键词数量：45423
-
-
-测试文本大小：8KB
-
 测试代码：
 
 ```
@@ -144,6 +140,10 @@ $end = getMillisecond();
 echo '耗时' . ($end - $start) . "毫秒\n";
 echo '内存占用:' . memory_get_usage() / 1024 / 1024 . "MB\n";
 ```
+
+关键词数量：**45423**条
+
+测试文本大小：**8KB**
 
 测试结果：
 
