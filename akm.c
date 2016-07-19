@@ -1,6 +1,6 @@
 /*
    +----------------------------------------------------------------------+
-   | PHP Version 7                                                        |
+   | PHP Version 5                                                        |
    +----------------------------------------------------------------------+
    | Copyright (c) 1997-2016 The PHP Group                                |
    +----------------------------------------------------------------------+
@@ -14,7 +14,7 @@
    +----------------------------------------------------------------------+
    | Author: maben <www.maben@foxmail.com>                                |
    +----------------------------------------------------------------------+
-   */
+ */
 
 /* $Id$ */
 
@@ -26,7 +26,7 @@
 #include "php_ini.h"
 #include "ext/standard/info.h"
 #include "php_akm.h"
-#include "zend_smart_str.h"
+#include "standard/php_smart_str.h"
 
 #include <dirent.h>
 #include <sys/stat.h>
@@ -89,12 +89,8 @@ static void akm_build_tree(char *filename, char *fullpath)
 
     /* add to HashTable */
     akm_trie_t *trie = akm_trie_create ();
-    zval ztrie;
-    ZVAL_PTR(&ztrie, trie);
 
-    zend_hash_add(akm_dict_ht,
-            zend_string_init(filename, strlen(filename), 1),
-            &ztrie);
+    zend_hash_add(akm_dict_ht, filename, strlen(filename), (void **)&trie, sizeof(akm_trie_t *), NULL);
 
     stream = php_stream_open_wrapper(fullpath, "r", REPORT_ERRORS, NULL);
     if (!stream) {
@@ -174,7 +170,7 @@ static int akm_dict_ht_init()
         return -1;
     }
 
-    zend_hash_init(akm_dict_ht, 0, NULL, ZVAL_PTR_DTOR, 0);
+    zend_hash_init(akm_dict_ht, 0, NULL, ZVAL_PTR_DTOR, 1);
     if (access(akm_dict_dir, R_OK) < 0) {
         return -1;
     }
@@ -187,28 +183,22 @@ static int akm_dict_ht_init()
 static void akm_dict_ht_free()
 {
     if (akm_dict_ht) {
-        zend_string *key;
-        zval *value;
-        zend_ulong idx;
-        akm_trie_t *trie;
-
-        ZEND_HASH_FOREACH_KEY_VAL(akm_dict_ht, idx, key, value) {
-
-            zend_string_free(key);
-            trie = Z_PTR_P(value);
-            akm_trie_release (trie);
-
-        } ZEND_HASH_FOREACH_END();
-
+        akm_trie_t **trie;
+        for (zend_hash_internal_pointer_reset(akm_dict_ht);
+            zend_hash_get_current_data(akm_dict_ht, (void **)&trie) == SUCCESS;
+            zend_hash_move_forward(akm_dict_ht)
+        ) {
+            akm_trie_release (*trie);
+        }
         FREE_HASHTABLE(akm_dict_ht);
     }
 }
 
-static akm_trie_t *akm_get_trie(char *key, size_t len)
+static akm_trie_t *akm_get_trie(char *key, int len)
 {
-    zval *trie = zend_hash_str_find(akm_dict_ht, key, len);
-    if (trie) {
-        return Z_PTR_P(trie);
+    akm_trie_t **trie;
+    if (zend_hash_find(akm_dict_ht, key, len, (void **)&trie) == SUCCESS) {
+        return *trie;
     }
     return NULL;
 }
@@ -220,11 +210,11 @@ static akm_trie_t *akm_get_trie(char *key, size_t len)
 
 ZEND_INI_MH(php_akm_enable)
 {
-    if (!new_value || new_value->len == 0) {
+    if (!new_value || new_value_length == 0) {
         return FAILURE;
     }
 
-    if (!strcasecmp(new_value->val, "on") || !strcmp(new_value->val, "1")) {
+    if (!strcasecmp(new_value, "on") || !strcmp(new_value, "1")) {
         akm_enable = 1;
     } else {
         akm_enable = 0;
@@ -235,16 +225,17 @@ ZEND_INI_MH(php_akm_enable)
 
 ZEND_INI_MH(php_akm_dict_dir)
 {
-    if (!new_value || new_value->len == 0) {
+    if (!new_value || new_value_length == 0) {
         return FAILURE;
     }
-    if (new_value->val[new_value->len] != '/') {
-        akm_dict_dir = pemalloc(new_value->len + 2, 1);
-        strcpy(akm_dict_dir, new_value->val);
-        akm_dict_dir[new_value->len] = '/';
-        akm_dict_dir[new_value->len + 1] = '\0';
+    if (new_value[new_value_length] != '/') {
+        akm_dict_dir = pemalloc(new_value_length + 2, 1);
+        strcpy(akm_dict_dir, new_value);
+        akm_dict_dir[new_value_length] = '/';
+        akm_dict_dir[new_value_length + 1] = '\0';
     } else {
-        akm_dict_dir = strdup(new_value->val);
+        new_value[new_value_length] = '\0';
+        akm_dict_dir = strdup(new_value);
     }
     if (akm_dict_dir == NULL) {
         return FAILURE;
@@ -266,75 +257,106 @@ struct _akm_replace_params {
 };
 
 static void akm_trie_traversal(akm_trie_t *trie,
-        void(*callback)(zend_string *, zend_ulong, zend_string *, void *), void *args)
+        void(*callback)(const char *, size_t, zend_ulong, const char *, size_t, void *), void *args)
 {
     akm_match_t m;
     unsigned int j;
     akm_pattern_t *pp;
-    zend_string *keyword,
-                *extension;
+    const char *keyword,
+               *extension;
+
+    size_t keyword_len,
+           extension_len;
+
     zend_ulong offset;
     while ((m = akm_trie_findnext(trie)).size) {
         for (j = 0; j < m.size; j++) {
             pp = &m.patterns[j];
-            keyword = zend_string_init(pp->ptext.astring, pp->ptext.length, 0);
-            extension = pp->id.u.stringy == NULL ? NULL :
-                zend_string_init(pp->id.u.stringy, strlen(pp->id.u.stringy), 0);
+            keyword = pp->ptext.astring;
+            keyword_len = pp->ptext.length;
+            extension = pp->id.u.stringy;
+            extension_len = (extension == NULL ? 0 : strlen(extension));
             offset = m.position;
-            callback(keyword, offset, extension, args);
+            callback(keyword, keyword_len, offset, extension, extension_len, args);
         }
     }
 }
 
 
-static void akm_match_handler(zend_string *keyword, zend_ulong offset, zend_string *extension, void *args)
+static void akm_match_handler(const char *keyword, size_t keyword_len,
+        zend_ulong offset, const char *extension, size_t extension_len, void *args)
 {
     zval *return_value = args;
-    zval entry,
-         zkeyword,
-         zoffset,
-         zextension;
+    zval *entry,
+         *zkeyword,
+         *zoffset,
+         *zextension;
 
-    zend_ulong hash_size;
+    MAKE_STD_ZVAL(entry);
+    array_init_size(entry, 3);
 
-    array_init_size(&entry, 3);
-
-    ZVAL_NEW_STR(&zkeyword, keyword);
-    ZVAL_LONG(&zoffset, offset);
+    MAKE_STD_ZVAL(zkeyword);
+    MAKE_STD_ZVAL(zoffset);
+    MAKE_STD_ZVAL(zextension);
+    ZVAL_STRINGL(zkeyword, keyword, keyword_len, 1);
+    ZVAL_LONG(zoffset, offset);
     if (extension == NULL) {
-        ZVAL_NULL(&zextension);
+        ZVAL_NULL(zextension);
     } else {
-        ZVAL_NEW_STR(&zextension, extension);
+        ZVAL_STRINGL(zextension, extension, extension_len, 1);
     }
 
-    zend_hash_str_add_new(Z_ARRVAL_P(&entry), "keyword", strlen("keyword"), &zkeyword);
-    zend_hash_str_add_new(Z_ARRVAL_P(&entry), "offset", strlen("offset"), &zoffset);
-    zend_hash_str_add_new(Z_ARRVAL_P(&entry), "extension", strlen("extension"), &zextension);
-    zend_hash_index_add_new(Z_ARRVAL_P(return_value), Z_ARRVAL_P(return_value)->nNumUsed, &entry);
+    zend_hash_add(Z_ARRVAL_P(entry), "keyword", sizeof("keyword"), (void **)&zkeyword, sizeof(zval *), NULL);
+    zend_hash_add(Z_ARRVAL_P(entry), "offset", sizeof("offset"), (void **)&zoffset, sizeof(zval *), NULL);
+    zend_hash_add(Z_ARRVAL_P(entry), "extension", sizeof("extension"), (void **)&zextension, sizeof(zval *), NULL);
+    zend_hash_index_update(Z_ARRVAL_P(return_value), Z_ARRVAL_P(return_value)->nNumOfElements, &entry, sizeof(zval *), NULL);
 }
 
-static void akm_replace_handler(zend_string *keyword, zend_ulong offset, zend_string *extension, void *args)
+static void akm_replace_handler(const char *keyword, size_t keyword_len,
+        zend_ulong offset, const char *extension, size_t extension_len, void *args)
 {
     struct _akm_replace_params *params = (struct _akm_replace_params *)args;
-    zval cb_args[3];
-    zval retval;
-    zval entry;
+    zval **cb_args[3];
+    zval *retval = NULL,
+         *entry,
+         *zkeyword,
+         *zoffset,
+         *zextension,
+         *rkeyword,
+         *roffset;
 
-    ZVAL_NEW_STR(&cb_args[0], keyword);
-    ZVAL_LONG(&cb_args[1], offset);
-    ZVAL_NEW_STR(&cb_args[2], extension);
+    cb_args[0] = &zkeyword;
+    cb_args[1] = &zoffset;
+    cb_args[2] = &zextension;
+
+    MAKE_STD_ZVAL(zkeyword);
+    MAKE_STD_ZVAL(zoffset);
+    MAKE_STD_ZVAL(zextension);
+
+    ZVAL_STRINGL(zkeyword, keyword, keyword_len, 0);
+    ZVAL_LONG(zoffset, offset);
+    if (extension == NULL) {
+        ZVAL_NULL(zextension);
+    } else {
+        ZVAL_STRINGL(zextension, extension, extension_len, 0);
+    }
 
     params->fci->params = cb_args;
-    params->fci->retval = &retval;
+    params->fci->retval_ptr_ptr = &retval;
 
-    array_init_size(&entry, 3);
 
     if (zend_call_function(params->fci, params->fci_cache) == SUCCESS) {
-        if (Z_TYPE(retval) == IS_STRING) {
-            zend_hash_str_add_new(Z_ARRVAL_P(&entry), "keyword", strlen("keyword"), &cb_args[0]);
-            zend_hash_str_add_new(Z_ARRVAL_P(&entry), "offset", strlen("offset"), &cb_args[1]);
-            zend_hash_str_add_new(Z_ARRVAL_P(&entry), "replace", strlen("replace"), &retval);
-            zend_hash_index_add_new(params->ht, params->ht->nNumUsed, &entry);
+        if (Z_TYPE_P(retval) == IS_STRING) {
+            MAKE_STD_ZVAL(entry);
+            array_init_size(entry, 3);
+            MAKE_STD_ZVAL(rkeyword);
+            MAKE_STD_ZVAL(roffset);
+            ZVAL_STRINGL(rkeyword, keyword, keyword_len, 0);
+            ZVAL_LONG(roffset, offset);
+            zend_hash_add(Z_ARRVAL_P(entry), "keyword", sizeof("keyword"), (void **)&rkeyword, sizeof(zval *), NULL);
+            zend_hash_add(Z_ARRVAL_P(entry), "offset", sizeof("offset"), (void **)&roffset, sizeof(zval *), NULL);
+            zend_hash_add(Z_ARRVAL_P(entry), "replace", sizeof("replace"), (void **)&retval, sizeof(zval *), NULL);
+            zend_hash_index_update(params->ht, params->ht->nNumOfElements, &entry, sizeof(zval *), NULL);
         }
     }
 }
@@ -346,8 +368,8 @@ PHP_FUNCTION(akm_match)
     char *dict_name,
          *text;
 
-    size_t dict_name_len,
-           text_len;
+    int dict_name_len,
+        text_len;
 
     akm_text_t  chunk;
 
@@ -380,10 +402,10 @@ PHP_FUNCTION(akm_replace)
     size_t dict_name_len;
     zend_ulong replace_count = 0;
 
-    HashTable *ht;
+    HashTable *replace_ht;
 
-    ALLOC_HASHTABLE(ht);
-    zend_hash_init(ht, 0, NULL, ZVAL_PTR_DTOR, 0);
+    ALLOC_HASHTABLE(replace_ht);
+    zend_hash_init(replace_ht, 0, NULL, ZVAL_PTR_DTOR, 0);
 
     zend_fcall_info fci = empty_fcall_info;
     zend_fcall_info_cache fci_cache = empty_fcall_info_cache;
@@ -393,9 +415,14 @@ PHP_FUNCTION(akm_replace)
 
     zend_ulong idx = 0;
 
-    if (zend_parse_parameters(ZEND_NUM_ARGS(), "sz/f", &dict_name, &dict_name_len,
+    if (zend_parse_parameters(ZEND_NUM_ARGS(), "szf", &dict_name, &dict_name_len,
                 &text, &fci, &fci_cache) == FAILURE) {
         return;
+    }
+
+    if (Z_TYPE_P(text) != IS_STRING) {
+        php_error_docref(NULL, E_ERROR, "argment 2 must be string", dict_name_len, dict_name);
+        RETURN_FALSE;
     }
 
     akm_trie_t *trie = akm_get_trie(dict_name, dict_name_len);
@@ -404,8 +431,8 @@ PHP_FUNCTION(akm_replace)
         RETURN_FALSE;
     }
 
-    text_c = ZSTR_VAL(Z_STR_P(text));
-    text_l = ZSTR_LEN(Z_STR_P(text));
+    text_c = Z_STRVAL_P(text);
+    text_l = Z_STRLEN_P(text);
 
     fci.no_separation = 0;
     fci.param_count   = 3;
@@ -419,38 +446,37 @@ PHP_FUNCTION(akm_replace)
     params.return_value = return_value;
     params.fci = &fci;
     params.fci_cache = &fci_cache;
-    params.ht = ht;
+    params.ht = replace_ht;
 
     akm_trie_traversal(trie, akm_replace_handler, (void *)&params);
 
-    if (ht->nNumUsed == 0) goto finally;
+    if (replace_ht->nNumOfElements == 0) goto finally;
 
     smart_str replaced = { 0 };
     zend_ulong copied_idx = 0;
     int copy_len= 0;
 
-    zval *entry,
-         *keyword,
-         *offset,
-         *replace;
+    zval **entry,
+         **keyword,
+         **offset,
+         **replace;
 
-    ZEND_HASH_FOREACH_NUM_KEY_VAL(ht, idx, entry) {
-        keyword = zend_hash_str_find(Z_ARRVAL_P(entry), "keyword", strlen("keyword"));
-        offset = zend_hash_str_find(Z_ARRVAL_P(entry), "offset", strlen("offset"));
-        replace = zend_hash_str_find(Z_ARRVAL_P(entry), "replace", strlen("replace"));
+    for (zend_hash_internal_pointer_reset(replace_ht);
+         zend_hash_get_current_data(replace_ht, (void **)&entry) == SUCCESS;
+         zend_hash_move_forward(replace_ht)
+    ) {
+        zend_hash_find(Z_ARRVAL_P(*entry), "keyword", sizeof("keyword"), (void **)&keyword);
+        zend_hash_find(Z_ARRVAL_P(*entry), "offset", sizeof("offset"), (void **)&offset);
+        zend_hash_find(Z_ARRVAL_P(*entry), "replace", sizeof("replace"), (void **)&replace);
 
-        copy_len = Z_LVAL_P(offset) - copied_idx - Z_STRLEN_P(keyword);
+        copy_len = Z_LVAL_P(*offset) - copied_idx - Z_STRLEN_P(*keyword);
         if (copy_len > 0) {
             smart_str_appendl(&replaced, text_c + copied_idx, copy_len);
-            smart_str_appendl(&replaced, Z_STRVAL_P(replace), Z_STRLEN_P(replace));
+            smart_str_appendl(&replaced, Z_STRVAL_P(*replace), Z_STRLEN_P(*replace));
+            replace_count++;
         }
-        copied_idx = Z_LVAL_P(offset);
-
-        zval_ptr_dtor(keyword);
-        zval_ptr_dtor(offset);
-        zval_ptr_dtor(replace);
-        zval_ptr_dtor(entry);
-    } ZEND_HASH_FOREACH_END();
+        copied_idx = Z_LVAL_P(*offset);
+    }
 
     if (copied_idx < text_l) {
         smart_str_appendl(&replaced, text_c + copied_idx, text_l - copied_idx);
@@ -458,15 +484,16 @@ PHP_FUNCTION(akm_replace)
     smart_str_0(&replaced);
 
     /* replace */
-    zval_ptr_dtor(text);
-    ZVAL_NEW_STR(text, replaced.s);
+    zval_dtor(text);
+    Z_STRVAL_P(text) = replaced.c;
+    Z_STRLEN_P(text) = replaced.len;
+	Z_TYPE_P(text) = IS_STRING;
 
 finally:
 
-    FREE_HASHTABLE(ht);
+    FREE_HASHTABLE(replace_ht);
     RETURN_LONG(replace_count);
 }
-
 /* }}} */
 
 
