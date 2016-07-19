@@ -310,7 +310,7 @@ static void akm_match_handler(zend_string *keyword, zend_ulong offset, zend_stri
     zend_hash_str_add_new(Z_ARRVAL_P(&entry), "keyword", sizeof("keyword"), &zkeyword);
     zend_hash_str_add_new(Z_ARRVAL_P(&entry), "offset", sizeof("offset"), &zoffset);
     zend_hash_str_add_new(Z_ARRVAL_P(&entry), "extension", sizeof("extension"), &zextension);
-    zend_hash_index_add_new(Z_ARRVAL_P(return_value), Z_ARRVAL_P(return_value)->nNumUsed, &entry);
+    zend_hash_index_add_new(Z_ARRVAL_P(return_value), zend_array_count(Z_ARRVAL_P(return_value)), &entry);
 }
 
 static void akm_replace_handler(zend_string *keyword, zend_ulong offset, zend_string *extension, void *args)
@@ -334,7 +334,7 @@ static void akm_replace_handler(zend_string *keyword, zend_ulong offset, zend_st
             zend_hash_str_add_new(Z_ARRVAL_P(&entry), "keyword", sizeof("keyword"), &cb_args[0]);
             zend_hash_str_add_new(Z_ARRVAL_P(&entry), "offset", sizeof("offset"), &cb_args[1]);
             zend_hash_str_add_new(Z_ARRVAL_P(&entry), "replace", sizeof("replace"), &retval);
-            zend_hash_index_add_new(params->ht, params->ht->nNumUsed, &entry);
+            zend_hash_index_add_new(params->ht, zend_array_count(params->ht), &entry);
         }
     }
 }
@@ -423,7 +423,7 @@ PHP_FUNCTION(akm_replace)
 
     akm_trie_traversal(trie, akm_replace_handler, (void *)&params);
 
-    if (ht->nNumUsed == 0) goto finally;
+    if (zend_array_count(ht) == 0) goto finally;
 
     smart_str replaced = { 0 };
     zend_ulong copied_idx = 0;
