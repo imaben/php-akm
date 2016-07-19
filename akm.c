@@ -443,6 +443,7 @@ PHP_FUNCTION(akm_replace)
         if (copy_len > 0) {
             smart_str_appendl(&replaced, text_c + copied_idx, copy_len);
             smart_str_appendl(&replaced, Z_STRVAL_P(replace), Z_STRLEN_P(replace));
+            replace_count++;
         }
         copied_idx = Z_LVAL_P(offset);
 
