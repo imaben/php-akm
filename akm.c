@@ -307,9 +307,9 @@ static void akm_match_handler(zend_string *keyword, zend_ulong offset, zend_stri
         ZVAL_NEW_STR(&zextension, extension);
     }
 
-    zend_hash_str_add_new(Z_ARRVAL_P(&entry), "keyword", strlen("keyword"), &zkeyword);
-    zend_hash_str_add_new(Z_ARRVAL_P(&entry), "offset", strlen("offset"), &zoffset);
-    zend_hash_str_add_new(Z_ARRVAL_P(&entry), "extension", strlen("extension"), &zextension);
+    zend_hash_str_add_new(Z_ARRVAL_P(&entry), "keyword", sizeof("keyword"), &zkeyword);
+    zend_hash_str_add_new(Z_ARRVAL_P(&entry), "offset", sizeof("offset"), &zoffset);
+    zend_hash_str_add_new(Z_ARRVAL_P(&entry), "extension", sizeof("extension"), &zextension);
     zend_hash_index_add_new(Z_ARRVAL_P(return_value), Z_ARRVAL_P(return_value)->nNumUsed, &entry);
 }
 
@@ -331,9 +331,9 @@ static void akm_replace_handler(zend_string *keyword, zend_ulong offset, zend_st
 
     if (zend_call_function(params->fci, params->fci_cache) == SUCCESS) {
         if (Z_TYPE(retval) == IS_STRING) {
-            zend_hash_str_add_new(Z_ARRVAL_P(&entry), "keyword", strlen("keyword"), &cb_args[0]);
-            zend_hash_str_add_new(Z_ARRVAL_P(&entry), "offset", strlen("offset"), &cb_args[1]);
-            zend_hash_str_add_new(Z_ARRVAL_P(&entry), "replace", strlen("replace"), &retval);
+            zend_hash_str_add_new(Z_ARRVAL_P(&entry), "keyword", sizeof("keyword"), &cb_args[0]);
+            zend_hash_str_add_new(Z_ARRVAL_P(&entry), "offset", sizeof("offset"), &cb_args[1]);
+            zend_hash_str_add_new(Z_ARRVAL_P(&entry), "replace", sizeof("replace"), &retval);
             zend_hash_index_add_new(params->ht, params->ht->nNumUsed, &entry);
         }
     }
@@ -435,9 +435,9 @@ PHP_FUNCTION(akm_replace)
          *replace;
 
     ZEND_HASH_FOREACH_NUM_KEY_VAL(ht, idx, entry) {
-        keyword = zend_hash_str_find(Z_ARRVAL_P(entry), "keyword", strlen("keyword"));
-        offset = zend_hash_str_find(Z_ARRVAL_P(entry), "offset", strlen("offset"));
-        replace = zend_hash_str_find(Z_ARRVAL_P(entry), "replace", strlen("replace"));
+        keyword = zend_hash_str_find(Z_ARRVAL_P(entry), "keyword", sizeof("keyword"));
+        offset = zend_hash_str_find(Z_ARRVAL_P(entry), "offset", sizeof("offset"));
+        replace = zend_hash_str_find(Z_ARRVAL_P(entry), "replace", sizeof("replace"));
 
         copy_len = Z_LVAL_P(offset) - copied_idx - Z_STRLEN_P(keyword);
         if (copy_len > 0) {
