@@ -169,12 +169,12 @@ static int akm_scan_directory(char *dirname,
 
 static int akm_dict_ht_init()
 {
-    ALLOC_HASHTABLE(akm_dict_ht);
+    akm_dict_ht = pemalloc(sizeof(HashTable), 1);
     if (akm_dict_ht == NULL) {
         return -1;
     }
 
-    zend_hash_init(akm_dict_ht, 0, NULL, ZVAL_PTR_DTOR, 0);
+    zend_hash_init(akm_dict_ht, 0, NULL, ZVAL_PTR_DTOR, 1);
     if (access(akm_dict_dir, R_OK) < 0) {
         return -1;
     }
@@ -200,13 +200,13 @@ static void akm_dict_ht_free()
 
         } ZEND_HASH_FOREACH_END();
 
-        FREE_HASHTABLE(akm_dict_ht);
+        pefree(akm_dict_ht, 1);
     }
 }
 
-static akm_trie_t *akm_get_trie(char *key, size_t len)
+static akm_trie_t *akm_get_trie(zend_string *key)
 {
-    zval *trie = zend_hash_str_find(akm_dict_ht, key, len);
+    zval *trie = zend_hash_find(akm_dict_ht, key);
     if (trie) {
         return Z_PTR_P(trie);
     }
@@ -307,10 +307,10 @@ static void akm_match_handler(zend_string *keyword, zend_ulong offset, zend_stri
         ZVAL_NEW_STR(&zextension, extension);
     }
 
-    zend_hash_str_add_new(Z_ARRVAL_P(&entry), "keyword", sizeof("keyword"), &zkeyword);
-    zend_hash_str_add_new(Z_ARRVAL_P(&entry), "offset", sizeof("offset"), &zoffset);
-    zend_hash_str_add_new(Z_ARRVAL_P(&entry), "extension", sizeof("extension"), &zextension);
-    zend_hash_index_add_new(Z_ARRVAL_P(return_value), zend_array_count(Z_ARRVAL_P(return_value)), &entry);
+    zend_hash_str_add(Z_ARRVAL_P(&entry), "keyword", sizeof("keyword") - 1, &zkeyword);
+    zend_hash_str_add(Z_ARRVAL_P(&entry), "offset", sizeof("offset") - 1, &zoffset);
+    zend_hash_str_add(Z_ARRVAL_P(&entry), "extension", sizeof("extension") - 1, &zextension);
+    zend_hash_index_add(Z_ARRVAL_P(return_value), zend_array_count(Z_ARRVAL_P(return_value)), &entry);
 }
 
 static void akm_replace_handler(zend_string *keyword, zend_ulong offset, zend_string *extension, void *args)
@@ -331,10 +331,10 @@ static void akm_replace_handler(zend_string *keyword, zend_ulong offset, zend_st
 
     if (zend_call_function(params->fci, params->fci_cache) == SUCCESS) {
         if (Z_TYPE(retval) == IS_STRING) {
-            zend_hash_str_add_new(Z_ARRVAL_P(&entry), "keyword", sizeof("keyword"), &cb_args[0]);
-            zend_hash_str_add_new(Z_ARRVAL_P(&entry), "offset", sizeof("offset"), &cb_args[1]);
-            zend_hash_str_add_new(Z_ARRVAL_P(&entry), "replace", sizeof("replace"), &retval);
-            zend_hash_index_add_new(params->ht, zend_array_count(params->ht), &entry);
+            zend_hash_str_add(Z_ARRVAL_P(&entry), "keyword", sizeof("keyword") - 1, &cb_args[0]);
+            zend_hash_str_add(Z_ARRVAL_P(&entry), "offset", sizeof("offset") - 1, &cb_args[1]);
+            zend_hash_str_add(Z_ARRVAL_P(&entry), "replace", sizeof("replace") - 1, &retval);
+            zend_hash_index_add(params->ht, zend_array_count(params->ht), &entry);
         }
     }
 }
@@ -343,28 +343,25 @@ static void akm_replace_handler(zend_string *keyword, zend_ulong offset, zend_st
 
 PHP_FUNCTION(akm_match)
 {
-    char *dict_name,
-         *text;
-
-    size_t dict_name_len,
-           text_len;
+    zend_string *dict,
+                *text;
 
     akm_text_t  chunk;
 
-    if (zend_parse_parameters(ZEND_NUM_ARGS(), "ss", &dict_name, &dict_name_len, &text, &text_len) == FAILURE) {
+    if (zend_parse_parameters(ZEND_NUM_ARGS(), "SS", &dict, &text) == FAILURE) {
         return;
     }
 
-    akm_trie_t *trie = akm_get_trie(dict_name, dict_name_len);
+    akm_trie_t *trie = akm_get_trie(dict);
     if (trie == NULL) {
-        php_error_docref(NULL, E_WARNING, "Dict name #%.*s is not found", dict_name_len, dict_name);
+        php_error_docref(NULL, E_WARNING, "Dict name #%s is not found", ZSTR_VAL(dict));
         RETURN_FALSE;
     }
 
     array_init(return_value);
 
-    chunk.astring = text;
-    chunk.length  = text_len;
+    chunk.astring = ZSTR_VAL(text);
+    chunk.length  = ZSTR_LEN(text);
 
     akm_trie_settext (trie, &chunk, 0);
     akm_trie_traversal(trie, akm_match_handler, (void *)return_value);
@@ -372,12 +369,11 @@ PHP_FUNCTION(akm_match)
 
 PHP_FUNCTION(akm_replace)
 {
-    char *dict_name;
     zval *text;
     char *text_c;
     size_t text_l;
+    zend_string *dict;
 
-    size_t dict_name_len;
     zend_ulong replace_count = 0;
 
     HashTable *ht;
@@ -393,14 +389,14 @@ PHP_FUNCTION(akm_replace)
 
     zend_ulong idx = 0;
 
-    if (zend_parse_parameters(ZEND_NUM_ARGS(), "sz/f", &dict_name, &dict_name_len,
+    if (zend_parse_parameters(ZEND_NUM_ARGS(), "Sz/f", &dict,
                 &text, &fci, &fci_cache) == FAILURE) {
         return;
     }
 
-    akm_trie_t *trie = akm_get_trie(dict_name, dict_name_len);
+    akm_trie_t *trie = akm_get_trie(dict);
     if (trie == NULL) {
-        php_error_docref(NULL, E_WARNING, "Dict name #%.*s is not found", dict_name_len, dict_name);
+        php_error_docref(NULL, E_WARNING, "Dict name #%s is not found", ZSTR_VAL(dict));
         RETURN_FALSE;
     }
 
@@ -435,9 +431,9 @@ PHP_FUNCTION(akm_replace)
          *replace;
 
     ZEND_HASH_FOREACH_NUM_KEY_VAL(ht, idx, entry) {
-        keyword = zend_hash_str_find(Z_ARRVAL_P(entry), "keyword", sizeof("keyword"));
-        offset = zend_hash_str_find(Z_ARRVAL_P(entry), "offset", sizeof("offset"));
-        replace = zend_hash_str_find(Z_ARRVAL_P(entry), "replace", sizeof("replace"));
+        keyword = zend_hash_str_find(Z_ARRVAL_P(entry), "keyword", sizeof("keyword") - 1);
+        offset = zend_hash_str_find(Z_ARRVAL_P(entry), "offset", sizeof("offset") - 1);
+        replace = zend_hash_str_find(Z_ARRVAL_P(entry), "replace", sizeof("replace") - 1);
 
         copy_len = Z_LVAL_P(offset) - copied_idx - Z_STRLEN_P(keyword);
         if (copy_len > 0) {
@@ -450,7 +446,7 @@ PHP_FUNCTION(akm_replace)
         zval_ptr_dtor(keyword);
         zval_ptr_dtor(offset);
         zval_ptr_dtor(replace);
-        zval_ptr_dtor(entry);
+
     } ZEND_HASH_FOREACH_END();
 
     if (copied_idx < text_l) {
