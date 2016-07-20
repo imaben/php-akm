@@ -436,17 +436,24 @@ PHP_FUNCTION(akm_replace)
         replace = zend_hash_str_find(Z_ARRVAL_P(entry), "replace", sizeof("replace") - 1);
 
         copy_len = Z_LVAL_P(offset) - copied_idx - Z_STRLEN_P(keyword);
-        if (copy_len > 0) {
-            smart_str_appendl(&replaced, text_c + copied_idx, copy_len);
-            smart_str_appendl(&replaced, Z_STRVAL_P(replace), Z_STRLEN_P(replace));
-            replace_count++;
+
+        if (copy_len <= 0 && idx != 0) { /* cover previous keyword */
+            replaced.s->len += copy_len;
+            copied_idx += copy_len;
+            copy_len = 0;
         }
+
+        if (copy_len)
+            smart_str_appendl(&replaced, text_c + copied_idx, copy_len);
+
+        smart_str_appendl(&replaced, Z_STRVAL_P(replace), Z_STRLEN_P(replace));
+        replace_count++;
+
         copied_idx = Z_LVAL_P(offset);
 
         zval_ptr_dtor(keyword);
         zval_ptr_dtor(offset);
         zval_ptr_dtor(replace);
-
     } ZEND_HASH_FOREACH_END();
 
     if (copied_idx < text_l) {
