@@ -89,7 +89,6 @@ static void akm_build_tree(char *filename, char *fullpath)
 
     /* add to HashTable */
     akm_trie_t *trie = akm_trie_create ();
-
     zend_hash_add(akm_dict_ht, filename, strlen(filename), (void **)&trie, sizeof(akm_trie_t *), NULL);
 
     stream = php_stream_open_wrapper(fullpath, "r", REPORT_ERRORS, NULL);
@@ -165,7 +164,7 @@ static int akm_scan_directory(char *dirname,
 
 static int akm_dict_ht_init()
 {
-    ALLOC_HASHTABLE(akm_dict_ht);
+    akm_dict_ht = pemalloc(sizeof(*akm_dict_ht), 1);
     if (akm_dict_ht == NULL) {
         return -1;
     }
@@ -190,7 +189,7 @@ static void akm_dict_ht_free()
         ) {
             akm_trie_release (*trie);
         }
-        FREE_HASHTABLE(akm_dict_ht);
+        pefree(akm_dict_ht, 1);
     }
 }
 
@@ -306,9 +305,9 @@ static void akm_match_handler(const char *keyword, size_t keyword_len,
         ZVAL_STRINGL(zextension, extension, extension_len, 1);
     }
 
-    zend_hash_add(Z_ARRVAL_P(entry), "keyword", sizeof("keyword"), (void **)&zkeyword, sizeof(zval *), NULL);
-    zend_hash_add(Z_ARRVAL_P(entry), "offset", sizeof("offset"), (void **)&zoffset, sizeof(zval *), NULL);
-    zend_hash_add(Z_ARRVAL_P(entry), "extension", sizeof("extension"), (void **)&zextension, sizeof(zval *), NULL);
+    zend_hash_add(Z_ARRVAL_P(entry), "keyword", sizeof("keyword") - 1, (void **)&zkeyword, sizeof(zval *), NULL);
+    zend_hash_add(Z_ARRVAL_P(entry), "offset", sizeof("offset") - 1, (void **)&zoffset, sizeof(zval *), NULL);
+    zend_hash_add(Z_ARRVAL_P(entry), "extension", sizeof("extension") - 1, (void **)&zextension, sizeof(zval *), NULL);
     zend_hash_index_update(Z_ARRVAL_P(return_value), Z_ARRVAL_P(return_value)->nNumOfElements, &entry, sizeof(zval *), NULL);
 }
 
@@ -450,7 +449,7 @@ PHP_FUNCTION(akm_replace)
 
     akm_trie_traversal(trie, akm_replace_handler, (void *)&params);
 
-    if (replace_ht->nNumOfElements == 0) goto finally;
+    if (zend_hash_num_elements(replace_ht) == 0) goto finally;
 
     smart_str replaced = { 0 };
     zend_ulong copied_idx = 0;
@@ -470,12 +469,22 @@ PHP_FUNCTION(akm_replace)
         zend_hash_find(Z_ARRVAL_P(*entry), "replace", sizeof("replace"), (void **)&replace);
 
         copy_len = Z_LVAL_P(*offset) - copied_idx - Z_STRLEN_P(*keyword);
-        if (copy_len > 0) {
-            smart_str_appendl(&replaced, text_c + copied_idx, copy_len);
-            smart_str_appendl(&replaced, Z_STRVAL_P(*replace), Z_STRLEN_P(*replace));
-            replace_count++;
+
+        if (copy_len <= 0 && idx != 0) { /* cover previous keyword */
+            replaced.len += copy_len;
+            copied_idx += copy_len;
+            copy_len = 0;
+            replace_count--;
         }
+
+        if (copy_len)
+            smart_str_appendl(&replaced, text_c + copied_idx, copy_len);
+
+        smart_str_appendl(&replaced, Z_STRVAL_P(*replace), Z_STRLEN_P(*replace));
+        replace_count++;
+
         copied_idx = Z_LVAL_P(*offset);
+        idx++;
     }
 
     if (copied_idx < text_l) {
