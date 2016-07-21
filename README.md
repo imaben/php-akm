@@ -25,6 +25,7 @@ $ sudo make install
 ## php.ini配置
 ```
 [akm]
+extension=akm.so
 akm.enable=On|Off
 akm.dict_dir=/home/dict
 ```
