@@ -422,7 +422,7 @@ PHP_FUNCTION(akm_replace)
     if (zend_array_count(ht) == 0) goto finally;
 
     smart_str replaced = { 0 };
-    zend_ulong copied_idx = 0;
+    zend_ulong copied_idx = 0, last_copy_len = 0;
     int copy_len= 0;
 
     zval *entry,
@@ -438,15 +438,17 @@ PHP_FUNCTION(akm_replace)
         copy_len = Z_LVAL_P(offset) - copied_idx - Z_STRLEN_P(keyword);
 
         if (copy_len <= 0 && idx != 0) { /* cover previous keyword */
-            replaced.s->len += copy_len;
-            copied_idx += copy_len;
+            replaced.s->len -= last_copy_len;
+            copied_idx -= last_copy_len;
             copy_len = 0;
+            replace_count--;
         }
 
         if (copy_len)
             smart_str_appendl(&replaced, text_c + copied_idx, copy_len);
 
         smart_str_appendl(&replaced, Z_STRVAL_P(replace), Z_STRLEN_P(replace));
+        last_copy_len = Z_STRLEN_P(replace);
         replace_count++;
 
         copied_idx = Z_LVAL_P(offset);
