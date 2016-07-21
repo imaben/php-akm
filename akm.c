@@ -72,9 +72,9 @@ static inline void akm_build_node(akm_trie_t *trie, char *keyword,
 
 static void akm_build_tree(char *filename, char *fullpath)
 {
-    php_stream *stream;
+    FILE       *stream;
     char       *line;
-    size_t      line_len = 0, i;
+    size_t      line_len = 0, read, i;
 
     char       *keyword,
                *extension;
@@ -91,12 +91,13 @@ static void akm_build_tree(char *filename, char *fullpath)
     akm_trie_t *trie = akm_trie_create ();
     zend_hash_add(akm_dict_ht, filename, strlen(filename), (void **)&trie, sizeof(akm_trie_t *), NULL);
 
-    stream = php_stream_open_wrapper(fullpath, "r", REPORT_ERRORS, NULL);
+    stream = fopen(fullpath, "r");
+
     if (!stream) {
         return;
     }
 
-    while (NULL != (line = php_stream_get_line(stream, NULL, 0, &line_len))) {
+    while (-1 != (read = getline(&line, &line_len, stream))) {
         /* remove \r\n */
         if (line[line_len - 1] == '\n') {
             line[line_len - 1] = '\0';
@@ -133,9 +134,9 @@ static void akm_build_tree(char *filename, char *fullpath)
         }
 
         akm_build_node(trie, keyword, keyword_len, extension);
-        efree(line);
     }
-
+    free(line);
+    fclose(stream);
     akm_trie_finalize (trie);
 }
 
@@ -154,7 +155,7 @@ static int akm_scan_directory(char *dirname,
     while (NULL != (ent = readdir(dir))) {
         if (ent->d_type == DT_REG) {
             sprintf(fullpath, "%s%s", dirname, ent->d_name);
-            akm_build_tree(ent->d_name, fullpath);
+            callback(ent->d_name, fullpath);
             success++;
         }
     }
@@ -452,7 +453,7 @@ PHP_FUNCTION(akm_replace)
     if (zend_hash_num_elements(replace_ht) == 0) goto finally;
 
     smart_str replaced = { 0 };
-    zend_ulong copied_idx = 0;
+    zend_ulong copied_idx = 0, last_copy_len = 0;
     int copy_len= 0;
 
     zval **entry,
@@ -471,8 +472,8 @@ PHP_FUNCTION(akm_replace)
         copy_len = Z_LVAL_P(*offset) - copied_idx - Z_STRLEN_P(*keyword);
 
         if (copy_len <= 0 && idx != 0) { /* cover previous keyword */
-            replaced.len += copy_len;
-            copied_idx += copy_len;
+            replaced.len -= last_copy_len;
+            copied_idx -= last_copy_len;
             copy_len = 0;
             replace_count--;
         }
@@ -481,6 +482,8 @@ PHP_FUNCTION(akm_replace)
             smart_str_appendl(&replaced, text_c + copied_idx, copy_len);
 
         smart_str_appendl(&replaced, Z_STRVAL_P(*replace), Z_STRLEN_P(*replace));
+
+        last_copy_len = Z_STRLEN_P(*replace);
         replace_count++;
 
         copied_idx = Z_LVAL_P(*offset);
