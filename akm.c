@@ -159,7 +159,7 @@ static int akm_scan_directory(char *dirname,
     while (NULL != (ent = readdir(dir))) {
         if (ent->d_type == DT_REG) {
             sprintf(fullpath, "%s%s", dirname, ent->d_name);
-            akm_build_tree(ent->d_name, fullpath);
+            callback(ent->d_name, fullpath);
             success++;
         }
     }
