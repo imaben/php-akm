@@ -171,14 +171,17 @@ static int akm_dict_ht_init()
 {
     akm_dict_ht = pemalloc(sizeof(HashTable), 1);
     if (akm_dict_ht == NULL) {
+        php_error_docref(NULL, E_ERROR, "Cannot alloc memory");
         return -1;
     }
 
     zend_hash_init(akm_dict_ht, 0, NULL, ZVAL_PTR_DTOR, 1);
     if (access(akm_dict_dir, R_OK) < 0) {
+        php_error_docref(NULL, E_ERROR, "Cannot access directory %s", akm_dict_dir);
         return -1;
     }
-    if (akm_scan_directory(akm_dict_dir, akm_build_tree) < 1) {
+    if (akm_scan_directory(akm_dict_dir, akm_build_tree) < 0) {
+        php_error_docref(NULL, E_ERROR, "Cannot open directory %s", akm_dict_dir);
         return -1;
     }
     return 0;
