@@ -325,7 +325,11 @@ static void akm_replace_handler(zend_string *keyword, zend_ulong offset, zend_st
 
     ZVAL_NEW_STR(&cb_args[0], keyword);
     ZVAL_LONG(&cb_args[1], offset);
-    ZVAL_NEW_STR(&cb_args[2], extension);
+    if (extension == NULL) {
+        ZVAL_NULL(&cb_args[2]);
+    } else {
+        ZVAL_NEW_STR(&cb_args[2], extension);
+    }
 
     params->fci->params = cb_args;
     params->fci->retval = &retval;
