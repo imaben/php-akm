@@ -98,6 +98,18 @@ int akm_replace(string $dict_name, string &$text, callable $callback)
 
 返回成功匹配的关键词个数
 
+### awk_get_dict_list
+
+**获取词典列表**
+
+```
+array akm_get_dict_list()
+```
+
+**返回值**
+
+返回已索引的词典名称列表
+
 ## 字典数据结构
 
 ```

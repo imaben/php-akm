@@ -480,6 +480,23 @@ finally:
     RETURN_LONG(replace_count);
 }
 
+PHP_FUNCTION(akm_get_dict_list)
+{
+    array_init(return_value);
+
+    zval dict;
+    zend_string *key;
+    zval *value;
+    zend_ulong idx;
+    akm_trie_t *trie;
+
+    ZEND_HASH_FOREACH_KEY_VAL(akm_dict_ht, idx, key, value) {
+        ZVAL_NEW_STR(&dict, key);
+        zend_hash_index_add(Z_ARRVAL_P(return_value), zend_array_count(Z_ARRVAL_P(return_value)), &dict);
+    } ZEND_HASH_FOREACH_END();
+}
+
+
 /* }}} */
 
 
@@ -573,8 +590,9 @@ ZEND_END_ARG_INFO()
  * Every user visible function must have an entry in akm_functions[].
  */
 const zend_function_entry akm_functions[] = {
-    PHP_FE(akm_match,   arginfo_akm_match)
-    PHP_FE(akm_replace, arginfo_akm_replace)
+    PHP_FE(akm_get_dict_list,   NULL)
+    PHP_FE(akm_match,           arginfo_akm_match)
+    PHP_FE(akm_replace,         arginfo_akm_replace)
     PHP_FE_END	/* Must be the last line in akm_functions[] */
 };
 /* }}} */
