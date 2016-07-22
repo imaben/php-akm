@@ -98,7 +98,7 @@ int akm_replace(string $dict_name, string &$text, callable $callback)
 
 返回成功匹配的关键词个数
 
-### awk_get_dict_list
+### akm_get_dict_list
 
 **获取词典列表**
 
