@@ -75,7 +75,7 @@ array akm_match(string $dict_name, string $text)
 - offset:敏感词所在文本中的位置
 - extension:扩展文本
 
-### awk_replace
+### akm_replace
 
 **关键词替换**
 
