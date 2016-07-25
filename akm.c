@@ -174,7 +174,7 @@ static int akm_dict_ht_init()
     if (access(akm_dict_dir, R_OK) < 0) {
         return -1;
     }
-    if (akm_scan_directory(akm_dict_dir, akm_build_tree) < 1) {
+    if (akm_scan_directory(akm_dict_dir, akm_build_tree) < 0) {
         return -1;
     }
     return 0;
@@ -506,6 +506,25 @@ finally:
     FREE_HASHTABLE(replace_ht);
     RETURN_LONG(replace_count);
 }
+
+PHP_FUNCTION(akm_get_dict_list)
+{
+    array_init(return_value);
+
+    char *key;
+    ulong idx;
+    uint key_len;
+    for (zend_hash_internal_pointer_reset(akm_dict_ht);
+         zend_hash_get_current_key_ex(akm_dict_ht, &key, &key_len, &idx, 0, NULL) != HASH_KEY_NON_EXISTENT;
+         zend_hash_move_forward(akm_dict_ht)
+    ) {
+        zval *zkey;
+        MAKE_STD_ZVAL(zkey);
+        ZVAL_STRINGL(zkey, key, key_len, 1);
+        zend_hash_next_index_insert(Z_ARRVAL_P(return_value), (void **)&zkey, sizeof(zval *), NULL);
+    }
+}
+
 /* }}} */
 
 
@@ -599,8 +618,9 @@ ZEND_END_ARG_INFO()
  * Every user visible function must have an entry in akm_functions[].
  */
 const zend_function_entry akm_functions[] = {
-    PHP_FE(akm_match,   arginfo_akm_match)
-    PHP_FE(akm_replace, arginfo_akm_replace)
+    PHP_FE(akm_get_dict_list,   NULL)
+    PHP_FE(akm_match,           arginfo_akm_match)
+    PHP_FE(akm_replace,         arginfo_akm_replace)
     PHP_FE_END	/* Must be the last line in akm_functions[] */
 };
 /* }}} */
