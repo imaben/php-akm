@@ -139,17 +139,13 @@ CPU:Intel(R) Core(TM) i5-4590 CPU @ 3.30GHz
 
 ```
 <?php
-function getMillisecond() {
-    list($t1, $t2) = explode(' ', microtime());
-    return (float)sprintf('%.5f',(floatval($t1)+floatval($t2))*1000);
-}
 
 $dict_name = 'dict';
 $text = file_get_contents("text.txt");
 
-$start = getMillisecond();
+$start = microtime(true);;
 $result = akm_match($dict_name, $text);
-$end = getMillisecond();
+$end = microtime(true);;
 echo '耗时' . ($end - $start) . "毫秒\n";
 echo '内存占用:' . memory_get_usage() / 1024 / 1024 . "MB\n";
 ```
