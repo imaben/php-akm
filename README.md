@@ -133,6 +133,7 @@ PC配置：
 CPU:Intel(R) Core(TM) i5-4590 CPU @ 3.30GHz
 内存：4GB*3 1600MHz
 硬盘：东芝Q300
+操作系统：Linux 4.6.4-1-ARCH
 ```
 
 测试代码：
