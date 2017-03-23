@@ -23,7 +23,7 @@ $ sudo make install
 ```
 
 ## php.ini配置
-```
+```ini
 [akm]
 extension=akm.so
 akm.enable=On|Off
@@ -42,7 +42,7 @@ akm.dict_dir=/home/dict
 
 **关键词匹配**
 
-```
+```php
 array akm_match(string $dict_name, string $text)
 ```
 
@@ -55,7 +55,7 @@ array akm_match(string $dict_name, string $text)
 
 返回匹配含有`keyword`、`offset`、`extension`字段数组列表的二维数组，如：
 
-```
+```php
 [
 	{
 		"keyword" : "敏感词",
@@ -79,7 +79,7 @@ array akm_match(string $dict_name, string $text)
 
 **关键词替换**
 
-```
+```php
 int akm_replace(string $dict_name, string &$text, callable $callback)
 ```
 
@@ -102,7 +102,7 @@ int akm_replace(string $dict_name, string &$text, callable $callback)
 
 **获取词典列表**
 
-```
+```php
 array akm_get_dict_list()
 ```
 
@@ -138,7 +138,7 @@ CPU:Intel(R) Core(TM) i5-4590 CPU @ 3.30GHz
 
 测试代码：
 
-```
+```php
 <?php
 
 $dict_name = 'dict';
