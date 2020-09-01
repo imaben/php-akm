@@ -44,6 +44,7 @@ static char *akm_dict_dir = NULL;
 static HashTable *akm_dict_ht = NULL;
 
 #define DELIMITER '|'
+#define MAX_KEYWORD_LENGTH 256 
 
 /**
  * {{{ akm_dict_ht
@@ -72,15 +73,14 @@ static inline void akm_build_node(akm_trie_t *trie, char *keyword,
 
 static void akm_build_tree(char *filename, char *fullpath)
 {
-    php_stream *stream;
-    char       *line;
-    size_t      line_len = 0, i;
+    FILE *fp;
+    size_t      ll = 0, i;
 
     char       *keyword,
                *extension;
     size_t      keyword_len;
-
     struct stat st;
+    char *line = emalloc(MAX_KEYWORD_LENGTH);
 
     stat(fullpath, &st);
     if (st.st_size == 0) {
@@ -96,23 +96,26 @@ static void akm_build_tree(char *filename, char *fullpath)
             zend_string_init(filename, strlen(filename), 1),
             &ztrie);
 
-    stream = php_stream_open_wrapper(fullpath, "r", REPORT_ERRORS, NULL);
-    if (!stream) {
+    fp = fopen(fullpath, "r");
+    if (!fp) {
+        php_error_docref(NULL, E_ERROR, "Cannot open dict file %s, errno:%d", fullpath, errno);
         return;
     }
 
-    while (NULL != (line = php_stream_get_line(stream, NULL, 0, &line_len))) {
+    while (NULL != fgets(line, MAX_KEYWORD_LENGTH, fp)) {
+        ll = strlen(line);
         /* remove \r\n */
-        if (line[line_len - 1] == '\n') {
-            line[line_len - 1] = '\0';
+        if (ll > 0 && line[ll - 1] == '\n') {
+            line[ll - 1] = '\0';
         }
 
-        if (line[line_len - 2] == '\r') {
-            line[line_len - 2] = '\0';
+        if (ll > 1 && line[ll - 2] == '\r') {
+            line[ll - 2] = '\0';
         }
-        line_len = strlen(line);
 
-        if (line_len == 0 || line[0] == DELIMITER) {
+        // recheck
+        ll = strlen(line);
+        if (ll == 0 || line[0] == DELIMITER) {
             continue;
         }
 
@@ -120,7 +123,7 @@ static void akm_build_tree(char *filename, char *fullpath)
         keyword     = line;
         keyword_len = 0;
         extension   = NULL;
-        for (i = 0; i < line_len; i++) {
+        for (i = 0; i < ll; i++) {
             if (line[i] == DELIMITER) {
                 keyword_len = i;
                 break;
@@ -128,19 +131,18 @@ static void akm_build_tree(char *filename, char *fullpath)
         }
 
         if (keyword_len == 0) { /* not found */
-            keyword_len = line_len;
+            keyword_len = ll;
         } else {
-            if (keyword_len + 1 == line_len) { /* example: "keyword|" */
-                keyword_len = line_len - 1;
+            if (keyword_len + 1 == ll) { /* example: "keyword|" */
+                keyword_len = ll - 1;
             } else {
                 extension = keyword + keyword_len + 1;
             }
         }
 
         akm_build_node(trie, keyword, keyword_len, extension);
-        efree(line);
     }
-
+    efree(line);
     akm_trie_finalize (trie);
 }
 
