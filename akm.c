@@ -142,6 +142,7 @@ static void akm_build_tree(char *filename, char *fullpath)
 
         akm_build_node(trie, keyword, keyword_len, extension);
     }
+    fclose(fp);
     efree(line);
     akm_trie_finalize (trie);
 }
